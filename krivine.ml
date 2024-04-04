@@ -13,7 +13,8 @@ type exp = N of int | B of bool
   | Abs of string * exp | App of exp * exp
   ;;
 
-exception Not_found;;
+exception NOT_FOUND;;
+exception TYPE_MISMATCH;;
 
 type ans = N of int | B of bool | P of ans*ans | Closure of exp*((string*ans) list) ;;
 type env = (string*ans) list;;
@@ -34,5 +35,33 @@ let rec stkmc focus stack = match focus, stack with
   | Closure(V x,t), s  -> stkmc (lookup_var x t) s
   | Closure(Abs(x,e) ,t),(cl::s) -> stkmc (Closure(e,t@[(x,cl)])) s
   | Closure(App(e1,e2),t),s -> stkmc (Closure(e1,t)) ([Closure(e2,t)]@s)
-  | Closure(Plus(e1,e2),t), s -> raise Not_found
-  | _ , _ -> raise Not_found
+  | Closure(Plus(e1,e2),t), s -> (match ((stkmc (Closure(e1,t)) s) ,(stkmc (Closure(e2,t)) s)) with
+                                  | (N n1, N n2) -> stkmc (Closure(N (n1+n2),t)) s 
+                                  | _ -> raise TYPE_MISMATCH
+                                  )
+  | Closure(Times(e1,e2),t), s -> (match ((stkmc (Closure(e1,t)) s) ,(stkmc (Closure(e2,t)) s)) with
+                                  | (N n1, N n2) -> stkmc (Closure(N (n1*n2),t)) s 
+                                  | _ -> raise TYPE_MISMATCH
+                                  )
+  | Closure(And(e1,e2),t), s -> (match ((stkmc (Closure(e1,t)) s) ,(stkmc (Closure(e2,t)) s)) with
+                                  | (B b1, B b2) -> stkmc (Closure(B (b1 && b2),t)) s 
+                                  | _ -> raise TYPE_MISMATCH
+                                  )
+  | Closure(Or(e1,e2),t), s -> (match ((stkmc (Closure(e1,t)) s) ,(stkmc (Closure(e2,t)) s)) with
+                                  | (B b1, B b2) -> stkmc (Closure(B (b1 || b2),t)) s 
+                                  | _ -> raise TYPE_MISMATCH
+                                  )
+  | Closure(Not e, t), s -> (match (stkmc (Closure(e, t)) s) with
+                                | B b -> stkmc (Closure(B (not b), t)) s
+                                | _ -> raise TYPE_MISMATCH
+                              )
+  | Closure(Eq(e1, e2), t), s -> (match ((stkmc (Closure(e1,t)) s) ,(stkmc (Closure(e2,t)) s)) with
+                                    | (N n1, N n2) -> stkmc (Closure(B (n1 = n2),t)) s 
+                                    | _ -> raise TYPE_MISMATCH
+                                  )
+  | Closure(Gt(e1, e2), t), s -> (match ((stkmc (Closure(e1,t)) s) ,(stkmc (Closure(e2,t)) s)) with
+                                    | (N n1, N n2) -> stkmc (Closure(B (n1 > n2),t)) s 
+                                    | _ -> raise TYPE_MISMATCH
+                                  )
+
+  | _ , _ -> raise NOT_FOUND
