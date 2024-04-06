@@ -1,8 +1,10 @@
 (* DESIGN CHOICES *)
 (* stkmc is a krivine + eval machine : clos*(clos list) -> clos -> ans *)
 (* it does the unpacking within itself and returns the final answer *)
+(* abstract machine runs eagerly, for eg (\x.(x+1))(20)  = 21 as per class notes *)
 
-type exp = N of int | B of bool
+type exp = 
+  N of int | B of bool
   | V of string
   | Plus of exp * exp | Times of exp * exp
   | And of exp * exp | Or of exp * exp | Not of exp
@@ -71,15 +73,15 @@ let rec stkmc focus stack = match focus, stack with
                                   | _ -> raise TYPE_MISMATCH
                                   )
   (* tuples *)
-  | Closure(Fst(e),t),s -> (match (stkmc (Closure(e,t)) s) with
-                            | P(e1,e2) -> (stkmc e1 s)
+  | Closure(Pair(e1,e2),t), s -> (P(Closure(e1,t),Closure(e2,t)))
+  | Closure(Fst e,t),s -> (match (stkmc (Closure(e,t)) s) with
+                            | P(e1,e2) -> stkmc e1 s
                             | _ -> raise TYPE_MISMATCH
                             )
-  | Closure(Snd(e),t),s -> (match (stkmc (Closure(e,t)) s) with
-                            | P(e1,e2) -> (stkmc e2 s)
+  | Closure(Snd e,t),s -> (match (stkmc (Closure(e,t)) s) with
+                            | P(e1,e2) -> stkmc e2 s
                             | _ -> raise TYPE_MISMATCH
                             )
-  | Closure(Pair(e1,e2),t), s -> P((stkmc (Closure(e1,t)) s),(stkmc (Closure(e2,t)) s))
   
   (* projections *)
   | Closure(Proj(e,n),t), s -> (match (e,n) with
@@ -90,71 +92,73 @@ let rec stkmc focus stack = match focus, stack with
   )
   | _ , _ -> raise INVALID
 
-  let test_cases = [
 
-    (* Basic arithmetic and comparison *)
-    (* (Closure(N 1,[]),[],N 1);
-    (Closure(Plus(N 3,N 4),[]),[], N 7);
-    (Closure(Times(N 8,N 9),[]),[], N 72);
-    (Closure (Plus (N 3, N 4), []), [], N 7);
-    (Closure (Times (N 8, N 9), []), [], N 72);
-    (Closure (Eq (N 5, N 5), []), [], B true);
-    (Closure (Eq (N 5, N 6), []), [], B false);
-    (Closure (Gt (N 7, N 4), []), [], B true);
-    (Closure (Gt (N 3, N 5), []), [], B false); *)
-  
-    (* Boolean expressions *)
-    (* (Closure (And (B true, B true), []), [], B true);
-    (Closure (And (B true, B false), []), [], B false);
-    (Closure (Or (B false, B false), []), [], B false);
-    (Closure (Or (B false, B true), []), [], B true);
-    (Closure (Not (B true), []), [], B false);
-    (Closure (Not (B false), []), [], B true); *)
-  
-    (* Conditional expressions *)
-    (* (Closure (IfTE (B true, N 10, N 20), []), [], N 10);
-    (Closure (IfTE (B false, N 10, N 20), []), [], N 20); *)
+let test_cases = [
 
-    (* Variables *)
-    (* (Closure((V "x"), [("x", Closure(N 6,[]))]),[], N 6);
-    (Closure (Plus (V "x", V "y"), [("x", Closure(N 6,[])); ("y", Closure(N 7,[]))]), [], N 13);
-    (Closure (IfTE (V "x", V "y", V "z"), [("x", Closure(B true,[])); ("y", Closure(N 6,[])); ("z", Closure(N 7,[]))]), [], N 6); *)
+  (* Basic arithmetic and comparison *)
+  (Closure(N 1,[]),[],N 1);
+  (Closure(Plus(N 3,N 4),[]),[], N 7);
+  (Closure(Times(N 8,N 9),[]),[], N 72);
+  (Closure (Plus (N 3, N 4), []), [], N 7);
+  (Closure (Times (N 8, N 9), []), [], N 72);
+  (Closure (Eq (N 5, N 5), []), [], B true);
+  (Closure (Eq (N 5, N 6), []), [], B false);
+  (Closure (Gt (N 7, N 4), []), [], B true);
+  (Closure (Gt (N 3, N 5), []), [], B false);
+
+  (* Boolean expressions *)
+  (Closure (And (B true, B true), []), [], B true);
+  (Closure (And (B true, B false), []), [], B false);
+  (Closure (Or (B false, B false), []), [], B false);
+  (Closure (Or (B false, B true), []), [], B true);
+  (Closure (Not (B true), []), [], B false);
+  (Closure (Not (B false), []), [], B true);
+
+  (* Conditional expressions *)
+  (Closure (IfTE (B true, N 10, N 20), []), [], N 10);
+  (Closure (IfTE (B false, N 10, N 20), []), [], N 20);
+
+  (* Variables *)
+  (Closure((V "x"), [("x", Closure(N 6,[]))]),[], N 6);
+  (Closure (Plus (V "x", V "y"), [("x", Closure(N 6,[])); ("y", Closure(N 7,[]))]), [], N 13);
+  (Closure (IfTE (V "x", V "y", V "z"), [("x", Closure(B true,[])); ("y", Closure(N 6,[])); ("z", Closure(N 7,[]))]), [], N 6);
+
+  (* Pairs and projections *)
+  (Closure(Pair (N 32, B true),[]),[],P (Closure(N 32,[]),Closure(B true,[])));
+  (Closure (Pair (V "x", V "y"), [("x", Closure(N 42,[])); ("y", Closure(B true,[]))]), [], P (Closure(V "x",[("x", Closure(N 42,[])); ("y", Closure(B true,[]))]),Closure(V "y",[("x", Closure(N 42,[])); ("y", Closure(B true,[]))])));
+  (Closure(Fst(Pair(N 42,B true)),[]),[],N 42);
   
-    (* Pairs and projections *)
-    (Closure (Pair (V "x", V "y"), [("x", Closure(N 42,[])); ("y", Closure(B true,[]))]), [], P (N 42, B true));
-    (Closure (Fst (V "pair"), [("pair", Closure((Pair(N 42, B true)),[]))]), [], N 42);
-    (Closure (Snd (V "pair"), [("pair", Closure((Pair(N 42, B true)),[]))]), [], B true);
+  (Closure(Proj([V "x";V "y";V "z"],1),[("x",Closure(N 3,[]));("y",Closure(N 7,[]))]),[], N 7); 
+
+  (* Test cases for abstraction *)
+  (Closure (Abs ("x", Plus (V "x", N 20)), []), [Closure(N 1,[])], N 21);
+  (Closure (Abs ("x", Plus (V "x", V "y")), [("y", Closure(N 5,[]))]), [Closure(N 1,[])], N 6);
   
-    (* Function abstraction and application *)
-    (* ([],[],[MKCLOS("x",[])],[],Closure("x",[],[]));
-    ([],[],[MKCLOS("x",[PLUS;EQ])],[],Closure("x",[PLUS;EQ],[]));
-    ([],[("y", N 42)],[MKCLOS("x",[PLUS;EQ])],[],Closure("x",[PLUS;EQ],[("y", N 42)]));
-    ([],[], (App(Abs("x",Plus(V "x", N 20)),N 5)),[],N 25); *)
+  (* depicting lazy eval since x is not used in the function and hence it is not evaluated *)
+  (Closure (Abs ("x", Abs ("y", V "y")), [("y",Closure(N 3,[]))]), [Closure(N 1,[]);Closure(N 2,[])], N 3);
   
-    (* Nested applications *)
-    (* ([], [],  (App(Abs("y", App(Abs("x", Plus(V "x", V "y")), N 3)), N 2)), [], N 5); *)
-  
-    (* Variable capture in abstraction and scoping *)
-    (* ([], [("x", N 22)],  (App(Abs("x", Plus(V "x", N 20)), V "x")), [], N 42);
-    ([], [("x", N 22);("y", N 2)],  (App(Abs("x", Times(Plus(V "x", N 20),V "y")), V "x")), [], N 84); *)
-  
-    (* Error cases  *)
-    (* change any of the above input/output *)
-  
-  ]
+  (* Test cases for application *)
+  (Closure (App (Abs ("x", Plus (V "x", N 20)), N 5), []), [], N 25);
+  (Closure (App (Abs ("x", Plus (V "x", V "y")), N 3), [("y", Closure(N 2,[]));("z", Closure(N 3,[]))]), [], N 5);
+  (Closure (App (Abs ("x", Plus (V "x", V "y")), Plus (N 2, N 3)), [("y", Closure(N 5,[]))]), [], N 10);
+
+  (* Error cases  *)
+  (* change any of the above input/output *)
+
+]
   
   
-  let rec run_tests cases = match cases with
-    | [] -> print_endline "All test cases passed!"
-    | (focus,stack,expected_result)::rest ->
-        let result = stkmc focus stack in
-          if result = expected_result then(
-            print_endline "Test passed!";
-            run_tests rest
-          )else(
-            print_endline "Test failed!";
-          );;
+let rec run_tests cases = match cases with
+  | [] -> print_endline "All test cases passed!"
+  | (focus,stack,expected_result)::rest ->
+      let result = stkmc focus stack in
+        if result = expected_result then(
+          print_endline "Test passed!";
+          run_tests rest
+        )else(
+          print_endline "Test failed!";
+        );;
   
   
   
-  run_tests test_cases;;
+run_tests test_cases;;

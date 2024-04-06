@@ -1,0 +1,8 @@
+ocamlopt -o test secd.ml
+./test
+
+to open utop
+eval $(opam env)
+utop
+
+#use filepath filename
